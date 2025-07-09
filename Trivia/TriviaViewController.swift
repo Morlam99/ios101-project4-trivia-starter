@@ -27,60 +27,116 @@ class TriviaViewController: UIViewController {
     addGradient()
     questionContainerView.layer.cornerRadius = 8.0
     // TODO: FETCH TRIVIA QUESTIONS HERE
+	  TriviaQuestionService.fetchData(amount: 5) { [weak self] fetchedQuestions in
+		  guard let self = self else { return }
+		  self.questions = fetchedQuestions
+		  self.currQuestionIndex = 0
+		  self.numCorrectQuestions = 0
+		  if !self.questions.isEmpty {
+			  self.updateQuestion(withQuestionIndex: self.currQuestionIndex)
+		  } else {
+			  print("No questions were fetched.")
+		  }
+	  }
+
   }
   
-  private func updateQuestion(withQuestionIndex questionIndex: Int) {
-    currentQuestionNumberLabel.text = "Question: \(questionIndex + 1)/\(questions.count)"
-    let question = questions[questionIndex]
-    questionLabel.text = question.question
-    categoryLabel.text = question.category
-    let answers = ([question.correctAnswer] + question.incorrectAnswers).shuffled()
-    if answers.count > 0 {
-      answerButton0.setTitle(answers[0], for: .normal)
-    }
-    if answers.count > 1 {
-      answerButton1.setTitle(answers[1], for: .normal)
-      answerButton1.isHidden = false
-    }
-    if answers.count > 2 {
-      answerButton2.setTitle(answers[2], for: .normal)
-      answerButton2.isHidden = false
-    }
-    if answers.count > 3 {
-      answerButton3.setTitle(answers[3], for: .normal)
-      answerButton3.isHidden = false
-    }
-  }
+	private func updateQuestion(withQuestionIndex questionIndex: Int) {
+		currentQuestionNumberLabel.text = "Question: \(questionIndex + 1)/\(questions.count)"
+		let question = questions[questionIndex]
+		questionLabel.text = question.question.htmlDecoded
+		categoryLabel.text = question.category.htmlDecoded
+
+		let answers = ([question.correctAnswer] + question.incorrectAnswers).shuffled()
+		let buttons = [answerButton0, answerButton1, answerButton2, answerButton3]
+
+		for (index, button) in buttons.enumerated() {
+			if index < answers.count {
+				button?.setTitle(answers[index].htmlDecoded, for: .normal)
+				button?.isHidden = false
+			} else {
+				button?.isHidden = true
+			}
+		}
+	}
+
   
-  private func updateToNextQuestion(answer: String) {
-    if isCorrectAnswer(answer) {
-      numCorrectQuestions += 1
-    }
-    currQuestionIndex += 1
-    guard currQuestionIndex < questions.count else {
-      showFinalScore()
-      return
-    }
-    updateQuestion(withQuestionIndex: currQuestionIndex)
-  }
+	private func updateToNextQuestion(answer: String) {
+		if isCorrectAnswer(answer) {
+			let alert = UIAlertController(
+				title: "Correct!",
+				message: "You have: \(numCorrectQuestions + 1)/\(questions.count) correct answers",
+				preferredStyle: .alert
+			)
+			
+			let okAction = UIAlertAction(title: "Next", style: .default) { [weak self] _ in
+				guard let self = self else { return }
+				self.numCorrectQuestions += 1
+				self.advanceToNextQuestion()
+			}
+			
+			alert.addAction(okAction)
+			present(alert, animated: true, completion: nil)
+			
+		} else {
+			let alert = UIAlertController(
+				title: "Incorrect",
+				message: "The correct answer was: \(questions[currQuestionIndex].correctAnswer)",
+				preferredStyle: .alert
+			)
+			
+			let okAction = UIAlertAction(title: "Next", style: .default) { [weak self] _ in
+				self?.advanceToNextQuestion()
+			}
+			
+			alert.addAction(okAction)
+			present(alert, animated: true, completion: nil)
+		}
+	}
+
+	private func advanceToNextQuestion() {
+		currQuestionIndex += 1
+		guard currQuestionIndex < questions.count else {
+			showFinalScore()
+			return
+		}
+		updateQuestion(withQuestionIndex: currQuestionIndex)
+	}
   
   private func isCorrectAnswer(_ answer: String) -> Bool {
     return answer == questions[currQuestionIndex].correctAnswer
   }
   
-  private func showFinalScore() {
-    let alertController = UIAlertController(title: "Game over!",
-                                            message: "Final score: \(numCorrectQuestions)/\(questions.count)",
-                                            preferredStyle: .alert)
-    let resetAction = UIAlertAction(title: "Restart", style: .default) { [unowned self] _ in
-      currQuestionIndex = 0
-      numCorrectQuestions = 0
-      updateQuestion(withQuestionIndex: currQuestionIndex)
-    }
-    alertController.addAction(resetAction)
-    present(alertController, animated: true, completion: nil)
-  }
+	private func showFinalScore() {
+		let alertController = UIAlertController(
+			title: "Game Over!",
+			message: "Final score: \(numCorrectQuestions)/\(questions.count)",
+			preferredStyle: .alert
+		)
+
+		let resetAction = UIAlertAction(title: "Restart", style: .default) { [weak self] _ in
+			self?.fetchNewQuestions()
+		}
+
+		alertController.addAction(resetAction)
+		present(alertController, animated: true, completion: nil)
+	}
+
   
+	private func fetchNewQuestions() {
+		TriviaQuestionService.fetchData(amount: 5) { [weak self] fetchedQuestions in
+			guard let self = self else { return }
+			self.questions = fetchedQuestions
+			self.currQuestionIndex = 0
+			self.numCorrectQuestions = 0
+			if !self.questions.isEmpty {
+				self.updateQuestion(withQuestionIndex: self.currQuestionIndex)
+			} else {
+				print("No new questions were fetched.")
+			}
+		}
+	}
+
   private func addGradient() {
     let gradientLayer = CAGradientLayer()
     gradientLayer.frame = view.bounds
